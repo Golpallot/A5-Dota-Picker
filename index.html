@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>A5 Dota Picker</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/lobby">⚔️ A5 Dota Picker</a>
+    <nav>
+      <a href="#/lobby" data-nav="lobby">Lobby</a>
+      <a href="#/aufstellung" data-nav="aufstellung">Aufstellung</a>
+      <a href="#/draft" data-nav="draft">Draft</a>
+      <a href="#/ideen" data-nav="ideen">Ideen</a>
+      <a href="#/spieler" data-nav="spieler">Spieler</a>
+      <a href="#/admin" data-nav="admin">Admin</a>
+    </nav>
+    <span id="meta-source" class="muted small"></span>
+  </header>
+  <main id="app"></main>
+  <datalist id="hero-list"></datalist>
+
+  <script src="data/config.js"></script>
+  <script src="data/heroes.js"></script>
+  <script src="data/pro.js"></script>
+  <script src="data/pro-query.js"></script>
+  <script src="data/hero-tags.js"></script>
+  <script src="data/combos.js"></script>
+  <script src="data/plays.js"></script>
+  <script src="data/players.js"></script>
+  <script src="js/logic.js"></script>
+  <script src="js/opendota.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

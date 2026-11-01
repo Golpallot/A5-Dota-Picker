@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>A5 Dota Picker – Tests</title>
+  <style>body{font:14px system-ui;background:#0e1116;color:#e6e8ec;padding:16px}.ok{color:#4caf7a}.fail{color:#d05a55}</style>
+</head>
+<body>
+  <h1>Logik-Tests</h1>
+  <div id="out"></div>
+  <script src="data/config.js"></script>
+  <script src="data/heroes.js"></script>
+  <script src="data/pro.js"></script>
+  <script src="data/hero-tags.js"></script>
+  <script src="data/combos.js"></script>
+  <script src="data/plays.js"></script>
+  <script>
+    window.HERO_BY_ID = {};
+    for (const h of window.DOTA_HEROES) window.HERO_BY_ID[h.id] = h;
+  </script>
+  <script src="js/logic.js"></script>
+  <script>
+    const out = document.getElementById("out");
+    let pass = 0, fail = 0;
+    function test(name, fn) {
+      try { fn(); pass++; out.innerHTML += `<div class="ok">✓ ${name}</div>`; }
+      catch (e) { fail++; out.innerHTML += `<div class="fail">✗ ${name}: ${e.message}</div>`; }
+    }
+    function eq(a, b, msg) { if (a !== b) throw new Error((msg || "") + " erwartet " + b + ", bekommen " + a); }
+    function ok(v, msg) { if (!v) throw new Error(msg || "falsch"); }
+
+    const pl = (id, pools, tryout) => ({ id, name: id, pools: Object.assign({ 1: [], 2: [], 3: [], 4: [], 5: [] }, pools), tryout: tryout || {}, vibecheck: [] });
+    const carry = pl("carry", { 1: [{ hero: 18, self: 5, team: 4 }, { hero: 48, self: 4 }] }, { 1: [8] });
+    const base = { allies: [], enemies: [], bracket: 5, winrates: {}, matchups: {}, weights: {} };
+    const lineups = [
+      { id: "a", assign: { 1: "carry", 2: null, 3: "off", 4: null, 5: "sup" } },
+      { id: "b", assign: { 1: "carry", 2: null, 3: null, 4: null, 5: "sup" } },
+      { id: "c", assign: { 1: "x", 2: null, 3: null, 4: null, 5: "sup" } }
+    ];
+
+    test("Vorschläge: jeder bekommt seine 1. Wahl, wenn möglich", () => {
+      const a = pl("a", {}); a.roles = { 1: 1, 2: 2 };
+      const b = pl("b", {}); b.roles = { 3: 1 };
+      const c = pl("c", {}); c.roles = { 5: 1, 4: 2 };
+      const best = Logic.generateLineups([a, b, c], 6)[0];
+      eq(best.assign[1], "a"); eq(best.assign[3], "b"); eq(best.assign[5], "c");
+      ok(best.allFirst);
+    });
+    test("Vorschläge: Konflikt auf 1. Wahl wird aufgelöst", () => {
+      const a = pl("a", {}); a.roles = { 3: 1, 1: 2 };
+      const b = pl("b", {}); b.roles = { 3: 1, 4: 3 };
+      const best = Logic.generateLineups([a, b], 6)[0];
+      ok(best.assign[3] === "a" || best.assign[3] === "b", "einer spielt Pos 3");
+      eq(Object.keys(best.assign).length, 2);
+      ok(!best.allFirst);
+    });
+    test("Vorschläge: ohne Rollen zählt der Heldenpool", () => {
+      const a = pl("a", { 5: [{ hero: 30, self: 5 }, { hero: 5, self: 4 }] });
+      const best = Logic.generateLineups([a], 6)[0];
+      eq(best.assign[5], "a");
+    });
+    test("Vorschläge: beste zuerst, maximal so viele wie gewünscht", () => {
+      const ps = [1, 2, 3].map((i) => { const p = pl("p" + i, {}); p.roles = { [i]: 1 }; return p; });
+      const list = Logic.generateLineups(ps, 4);
+      eq(list.length, 4);
+      ok(list[0].score >= list[3].score);
+    });
+    test("Lane-Konflikte: Pos 1+5 und 3+4 zählen als eine Lane", () => {
+      const conf = [{ a: "a", b: "b", note: "nope" }];
+      eq(Logic.laneConflicts({ 1: "a", 5: "b" }, conf).length, 1);
+      eq(Logic.laneConflicts({ 3: "a", 4: "b" }, conf).length, 1);
+      eq(Logic.laneConflicts({ 1: "a", 3: "b" }, conf).length, 0);
+      eq(Logic.laneConflicts({ 2: "a", 1: "b" }, conf).length, 0);
+      eq(Logic.laneConflicts({ 1: "a", 5: "b" }, conf)[0].laneName, "Safelane");
+    });
+    test("Vorschläge: Konfliktpaare rutschen nach hinten", () => {
+      const a = pl("a", {}); a.roles = { 5: 1 };
+      const b = pl("b", {}); b.roles = { 1: 1 };
+      const conf = [{ a: "a", b: "b", note: "" }];
+      const ohne = Logic.generateLineups([a, b], 6);
+      eq(ohne[0].assign[5], "a"); eq(ohne[0].assign[1], "b"); // beide 1. Wahl, aber gleiche Lane
+      const mit = Logic.generateLineups([a, b], 99, conf);
+      eq(mit[0].conflicts.length, 0, "beste Aufstellung ohne Konflikt");
+      ok(mit[0].assign[5] !== "a" || mit[0].assign[1] !== "b", "Safelane-Duo wird getrennt");
+      ok(mit[mit.length - 1].conflicts.length > 0, "Konflikt-Varianten ganz hinten");
+      ok(mit.some((x) => x.conflicts.length > 0), "Konflikt-Varianten bleiben erhalten");
+    });
+    test("Vorschläge: unvermeidbare Konflikte werden trotzdem angeboten", () => {
+      const ps = [1, 2, 3, 4, 5].map((i) => pl("p" + i, {}));
+      const conf = [];
+      for (const x of ps) for (const y of ps) if (x.id < y.id) conf.push({ a: x.id, b: y.id });
+      const list = Logic.generateLineups(ps, 3, conf); // jede Lane hat 2 Leute → immer 2 Konflikte
+      ok(list.length > 0, "es gibt trotzdem Vorschläge");
+      eq(list[0].conflicts.length, 2);
+    });
+    test("sameAssign erkennt gleiche Zuordnung", () => {
+      ok(Logic.sameAssign({ 1: "a", 3: "b" }, { 1: "a", 2: null, 3: "b" }));
+      ok(!Logic.sameAssign({ 1: "a" }, { 1: "b" }));
+    });
+    test("Aufstellungen: exakte Gruppe", () => {
+      const m = Logic.lineupsFor(["sup", "carry", "off"], lineups);
+      eq(m.exact.map((l) => l.id).join(), "a"); eq(m.partial.length, 0);
+    });
+    test("Aufstellungen: Teilgruppe → größere mit Randoms", () => {
+      const m = Logic.lineupsFor(["carry", "sup"], lineups);
+      eq(m.exact.map((l) => l.id).join(), "b"); eq(m.partial.map((l) => l.id).join(), "a");
+    });
+    test("Bewertung: Durchschnitt und Delta", () => {
+      const r = Logic.rating({ hero: 1, self: 5, team: 3 });
+      eq(r.avg, 4); eq(r.delta, -2);
+      const s = Logic.rating({ hero: 1, self: 4 });
+      eq(s.avg, 4); eq(s.delta, null);
+    });
+    test("score: Komfort zählt", () => {
+      const a = Logic.scoreHero(Object.assign({}, base, { hero: 18, pos: 1, player: carry }));
+      const b = Logic.scoreHero(Object.assign({}, base, { hero: 1, pos: 1, player: carry }));
+      ok(a.score > b.score);
+    });
+    test("score: Combo-Bonus (Magnus + Sven)", () => {
+      const without = Logic.scoreHero(Object.assign({}, base, { hero: 18, pos: 1, player: carry }));
+      const withM = Logic.scoreHero(Object.assign({}, base, { hero: 18, pos: 1, player: carry, allies: [{ hero: 97, pos: 3 }] }));
+      ok(withM.parts.synergy >= 15, "Synergie " + withM.parts.synergy);
+      ok(withM.score > without.score);
+    });
+    test("score: Teambedarf – Save fehlt", () => {
+      const r = Logic.scoreHero(Object.assign({}, base, { hero: 111, pos: 5, player: null, allies: [{ hero: 18, pos: 1 }] }));
+      ok(r.reasons.some((x) => x.text.includes("Save")));
+    });
+    test("score: anti-illusion gegen PL", () => {
+      const r = Logic.scoreHero(Object.assign({}, base, { hero: 48, pos: 1, player: carry, enemies: [12] }));
+      ok(r.parts.counter >= 7);
+    });
+    test("score: Vibecheck ohne Abzug", () => {
+      const vp = pl("v", { 1: [{ hero: 12, self: 5 }] });
+      const plain = Logic.scoreHero(Object.assign({}, base, { hero: 12, pos: 1, player: vp }));
+      vp.vibecheck = [{ hero: 12, note: "bitte nicht" }];
+      const vibed = Logic.scoreHero(Object.assign({}, base, { hero: 12, pos: 1, player: vp }));
+      eq(vibed.score, plain.score); eq(vibed.vibe, "bitte nicht");
+    });
+    test("suggest: vergebene Helden fehlen", () => {
+      const r = Logic.suggest(Object.assign({}, base, { pos: 1, player: carry, taken: new Set([18]), limit: 5 }));
+      ok(!r.pool.some((s) => s.hero === 18)); eq(r.pool.length, 1);
+    });
+    test("suggest: Hauptliste nur aus eigenem Pool", () => {
+      const r = Logic.suggest(Object.assign({}, base, { pos: 1, player: carry, taken: new Set(), limit: 6 }));
+      eq(r.pool.map((s) => s.hero).sort().join(), "18,48");
+    });
+    test("Wunschhelden: beide Schreibweisen werden gelesen", () => {
+      const p = pl("w", {}, { 1: [8, { hero: 70, self: 4 }] });
+      const w = Logic.wishEntries(p, 1);
+      eq(w.length, 2); eq(w[0].hero, 8); eq(w[1].self, 4);
+    });
+    test("Wunschheld ohne Sterne bekommt einen Startwert statt 0", () => {
+      const p = pl("w", {}, { 1: [8] });
+      const r = Logic.scoreHero(Object.assign({}, base, { hero: 8, pos: 1, player: p, wishBaseline: 2.5, wishFactor: 0.85 }));
+      ok(r.wish); ok(r.rating.unsure);
+      ok(Math.abs(r.parts.comfort - 2.5 * 6 * 0.85) < 0.001, "Komfort " + r.parts.comfort);
+      const fremd = Logic.scoreHero(Object.assign({}, base, { hero: 1, pos: 1, player: p }));
+      eq(fremd.parts.comfort, 0);
+    });
+    test("Wunschheld mit Sternen zählt mehr als ohne", () => {
+      const a = pl("a", {}, { 1: [{ hero: 8, self: 5 }] });
+      const b = pl("b", {}, { 1: [8] });
+      const mit = Logic.scoreHero(Object.assign({}, base, { hero: 8, pos: 1, player: a, wishBaseline: 2.5 }));
+      const ohne = Logic.scoreHero(Object.assign({}, base, { hero: 8, pos: 1, player: b, wishBaseline: 2.5 }));
+      ok(mit.parts.comfort > ohne.parts.comfort);
+      ok(!mit.rating.unsure);
+    });
+    test("Wunschheld meldet 'Gelegenheit', wenn er situativ stark ist", () => {
+      const p = pl("w", {}, { 1: [48] }); // Luna, anti-illusion
+      const ruhig = Logic.scoreHero(Object.assign({}, base, { hero: 48, pos: 1, player: p, chanceThreshold: 8 }));
+      const jetzt = Logic.scoreHero(Object.assign({}, base, { hero: 48, pos: 1, player: p, chanceThreshold: 8,
+        enemies: [12], allies: [{ hero: 30, pos: 5 }] }));
+      ok(!ruhig.chance);
+      ok(jetzt.chance, "Situation " + jetzt.situation);
+      eq(jetzt.reasons[0].text, "jetzt wäre die Gelegenheit");
+    });
+    test("suggest: Wunschhelden kommen zusätzlich einzeln zurück", () => {
+      const p = pl("w", { 1: [{ hero: 18, self: 5 }] }, { 1: [70] });
+      const r = Logic.suggest(Object.assign({}, base, { pos: 1, player: p, taken: new Set(), limit: 6 }));
+      eq(r.wishes.map((w) => w.hero).join(), "70");
+      ok(r.pool.every((s) => s.hero !== 70), "Wunschheld bleibt aus der Hauptliste");
+    });
+    test("suggest: Wunschheld zuerst unter 'Zum Ausprobieren'", () => {
+      const r = Logic.suggest(Object.assign({}, base, { pos: 1, player: carry, taken: new Set(), limit: 6, tryLimit: 3 }));
+      eq(r.tryout[0].hero, 8); eq(r.tryout[0].kind, "wish"); ok(r.tryout[0].wish);
+      ok(r.tryout.length >= 3);
+      ok(r.tryout.every((s) => s.hero !== 18 && s.hero !== 48), "Poolhelden dürfen nicht doppelt auftauchen");
+    });
+    test("suggest: höhere Bewertung → weiter oben", () => {
+      const r = Logic.suggest(Object.assign({}, base, { pos: 1, player: carry, taken: new Set(), limit: 6 }));
+      eq(r.pool[0].hero, 18);
+    });
+    test("Standard-Pick-Reihenfolge: 5+4 → 3+1 → 2", () => {
+      const steps = window.DOTA_CONFIG.pickOrders[0].steps;
+      eq(Logic.nextPositions(steps, []).join(), "5,4");
+      eq(Logic.nextPositions(steps, [5, 4]).join(), "3,1");
+      eq(Logic.nextPositions(steps, [5, 4, 3, 1]).join(), "2");
+    });
+    test("Meta Pro: Tier-Werte korrekt summiert", () => {
+      const pro = { games: { 1: 100, 2: 200 }, heroes: { 5: [10, 6, 20, 30, 18, 40] } };
+      const both = Logic.proStats(pro, 5, [1, 2]);
+      eq(both.picks, 40); eq(both.wins, 24); eq(both.bans, 60); eq(both.games, 300);
+      eq(Logic.proStats(pro, 5, [1]).picks, 10);
+    });
+    test("Meta Pro: umkämpfter Held > ignorierter Held", () => {
+      const pro = { games: { 1: 100, 2: 100 }, heroes: { 5: [40, 24, 80, 40, 22, 60], 26: [1, 0, 0, 0, 0, 0] } };
+      const hot = Logic.metaPart({ hero: 5, metaMode: "pro", pro });
+      const cold = Logic.metaPart({ hero: 26, metaMode: "pro", pro });
+      ok(hot.points > cold.points, hot.points + " vs " + cold.points);
+      ok(hot.reasons[0].text.includes("umkämpft"));
+    });
+    test("Meta 'both' mittelt Pub und Pro", () => {
+      const pro = { games: { 1: 100, 2: 100 }, heroes: { 5: [0, 0, 0, 0, 0, 0] } };
+      const r = Logic.metaPart({ hero: 5, metaMode: "both", pro, bracket: 7, winrates: { 5: { 7: 54 } } });
+      eq(r.reasons.length, 1); // Pro ohne Picks/Bans → kein Chip
+      ok(Math.abs(r.points - (6 + -1) / 2) < 0.001, "Punkte " + r.points);
+    });
+    test("Team-Check enthält Stun zuerst sowie Tank, Nuke, Counter-Initiation", () => {
+      const needs = Object.keys(window.TAG_INFO).filter((t) => window.TAG_INFO[t].need);
+      eq(needs[0], "stun");
+      ok(["tanky", "nuke", "counter-init"].every((t) => needs.includes(t)));
+    });
+    test("nextPositions folgt der Pick-Reihenfolge", () => {
+      const steps = [[5, 4], [3], [2], [1]];
+      eq(Logic.nextPositions(steps, []).join(), "5,4");
+      eq(Logic.nextPositions(steps, [5]).join(), "4");
+      eq(Logic.nextPositions(steps, [5, 4]).join(), "3");
+    });
+    const playCtx = (players, assign, locks, taken) => ({
+      assign, locks: locks || {}, taken: new Set(taken || []),
+      players: players.reduce((m, p) => (m[p.id] = p, m), {})
+    });
+    const testPlay = { id: "t1", name: "Test", scope: "lane-safe", plan: "early", difficulty: 1,
+      slots: [{ pos: 5, heroes: [30, 26] }, { pos: 1, heroes: [8, 70] }], order: [5, 1], idea: "", tips: [] };
+
+    test("Idee: passt, wenn beide die Helden im Pool haben", () => {
+      const sup = pl("sup", { 5: [{ hero: 30, self: 5 }] });
+      const car = pl("car", { 1: [{ hero: 8, self: 4 }] });
+      const ev = Logic.evaluatePlay(testPlay, playCtx([sup, car], { 5: "sup", 1: "car" }));
+      eq(ev.status, "offen"); eq(ev.done, 0); eq(ev.total, 2);
+      eq(ev.slots[0].options[0].hero, 30);
+    });
+    test("Idee: unpassend, wenn die Position niemand spielt", () => {
+      const sup = pl("sup", { 5: [{ hero: 30, self: 5 }] });
+      eq(Logic.evaluatePlay(testPlay, playCtx([sup], { 5: "sup" })).status, "unpassend");
+    });
+    test("Idee: blockiert, wenn alle Helden eines Slots weg sind", () => {
+      const sup = pl("sup", { 5: [{ hero: 30, self: 5 }] });
+      const car = pl("car", { 1: [{ hero: 8, self: 4 }] });
+      const ev = Logic.evaluatePlay(testPlay, playCtx([sup, car], { 5: "sup", 1: "car" }, {}, [30]));
+      eq(ev.status, "blockiert");
+    });
+    test("Idee: Fortschritt zählt gelockte Helden", () => {
+      const sup = pl("sup", { 5: [{ hero: 30, self: 5 }] });
+      const car = pl("car", { 1: [{ hero: 8, self: 4 }] });
+      const ev = Logic.evaluatePlay(testPlay, playCtx([sup, car], { 5: "sup", 1: "car" }, { 5: 30 }, [30]));
+      eq(ev.done, 1); eq(ev.status, "offen"); eq(ev.slots[0].state, "erledigt");
+    });
+    test("Idee: anderer Held gelockt → verpasst", () => {
+      const sup = pl("sup", { 5: [{ hero: 30, self: 5 }] });
+      const car = pl("car", { 1: [{ hero: 8, self: 4 }] });
+      const ev = Logic.evaluatePlay(testPlay, playCtx([sup, car], { 5: "sup", 1: "car" }, { 5: 87 }, [87]));
+      eq(ev.status, "blockiert"); eq(ev.slots[0].state, "verpasst");
+    });
+    test("Idee: offene Slots liefern Helden für die Vorschläge", () => {
+      const sup = pl("sup", { 5: [{ hero: 30, self: 5 }] });
+      const car = pl("car", { 1: [{ hero: 8, self: 4 }] });
+      const ev = Logic.evaluatePlay(testPlay, playCtx([sup, car], { 5: "sup", 1: "car" }));
+      eq(Logic.playHeroesFor(ev, 5).join(), "30");
+      eq(Logic.playHeroesFor(ev, 1).join(), "8");
+    });
+    test("Auto-Ideen: finden Combos aus den Pools", () => {
+      const off = pl("off", { 3: [{ hero: 97, self: 4 }] });   // Magnus
+      const car = pl("car", { 1: [{ hero: 18, self: 5 }] });   // Sven
+      const list = Logic.autoPlays(playCtx([off, car], { 3: "off", 1: "car" }), 5);
+      ok(list.length > 0);
+      const heroes = list[0].slots.map((s) => s.heroes[0]).sort((a, b) => a - b);
+      eq(heroes.join(), "18,97");
+    });
+    test("Daten: Ideen verweisen auf echte Helden und bekannte Kategorien", () => {
+      for (const p of window.DOTA_PLAYS) {
+        ok(window.SCOPE_INFO[p.scope], "Kategorie " + p.scope);
+        ok(window.PLAN_INFO[p.plan], "Spielplan " + p.plan);
+        for (const s of p.slots) {
+          ok([1, 2, 3, 4, 5].includes(s.pos), "Position " + s.pos);
+          for (const h of s.heroes) ok(window.HERO_BY_ID[h], "Held " + h + " in " + p.id);
+        }
+      }
+    });
+    test("Daten: jeder Held hat Tags", () => {
+      const missing = window.DOTA_HEROES.filter((h) => !window.DOTA_TAGS[h.id]).map((h) => h.name);
+      eq(missing.length, 0, "fehlend: " + missing.join(", "));
+    });
+    test("Daten: nur bekannte Tags", () => {
+      const bad = [];
+      for (const id in window.DOTA_TAGS) for (const t of Logic.heroTags(id)) if (!window.TAG_INFO[t]) bad.push(id + ":" + t);
+      eq(bad.length, 0, bad.join(", "));
+    });
+    test("Daten: Combos referenzieren echte Helden", () => {
+      const bad = window.DOTA_COMBOS.filter((c) => !window.HERO_BY_ID[c[0]] || !window.HERO_BY_ID[c[1]]);
+      eq(bad.length, 0);
+    });
+
+    out.innerHTML = `<h2 class="${fail ? "fail" : "ok"}">${pass} bestanden, ${fail} fehlgeschlagen</h2>` + out.innerHTML;
+  </script>
+</body>
+</html>
