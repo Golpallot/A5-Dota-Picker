@@ -132,6 +132,18 @@
     return r ? `<span class="role-hint r${r}" title="${r}. Wunschrolle">${r}. Wahl</span>`
              : `<span class="role-hint none" title="spielt diese Position normalerweise nicht">Nebenrolle</span>`;
   }
+  const ORDINAL = { 1: "Erste Wahl", 2: "Zweite Wahl", 3: "Dritte Wahl", 4: "Vierte Wahl", 5: "Fünfte Wahl" };
+
+  // Untereinander, eine Zeile pro Wunschrolle – für die Lobby
+  function roleLines(p) {
+    const ranked = L.POSITIONS.filter((x) => p.roles[x]).sort((a, b) => p.roles[a] - p.roles[b]);
+    if (!ranked.length) return '<div class="pc-empty">noch kein Spielerfragebogen ausgefüllt</div>';
+    return ranked.map((x) => `<div class="pc-role">
+      <span class="pc-rank">${ORDINAL[p.roles[x]] || p.roles[x] + ". Wahl"}</span>
+      <span class="pos pos-${x}">${esc(window.POSITION_NAMES[x])}</span>
+    </div>`).join("");
+  }
+
   function roleList(p) {
     const ranked = L.POSITIONS.filter((x) => p.roles[x]).sort((a, b) => p.roles[a] - p.roles[b]);
     return ranked.map((x) => `<span class="role-chip">${p.roles[x]}. ${posTag(x)}</span>`).join(" ");
@@ -220,10 +232,9 @@
   function viewLobby() {
     const cards = db.players.map((p) => {
       const on = S.selected.includes(p.id);
-      const pos = rolesOrdered(p);
       return `<button class="player-card ${on ? "on" : ""}" data-action="toggle-player" data-id="${esc(p.id)}">
-        <div class="pc-name">${esc(p.name)}</div>
-        <div class="pc-sub">${Object.keys(p.roles).length ? roleList(p) : pos.map(posTag).join(" ") || '<span class="muted small">noch keine Rollen</span>'}</div>
+        <div class="pc-name">${esc(p.name)}${on ? '<span class="pc-check">✓</span>' : ""}</div>
+        <div class="pc-sub">${roleLines(p)}</div>
       </button>`;
     }).join("");
     const m = S.selected.length ? L.lineupsFor(S.selected, db.lineups) : { exact: [], partial: [] };
