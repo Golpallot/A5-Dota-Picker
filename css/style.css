@@ -56,6 +56,8 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
 
 /* Hilfe-Fenster */
 .help-overlay { position: fixed; inset: 0; z-index: 50; background: #0007; display: flex; align-items: flex-start; justify-content: center; padding: 4rem 16px; }
+/* Ohne diese Zeile schlägt display:flex das hidden-Attribut und die Seite liegt unter einem Schleier */
+.help-overlay[hidden] { display: none; }
 .help-box { background: var(--panel); border: 1px solid var(--accent-2); border-radius: var(--radius);
   padding: 1rem 1.25rem; max-width: 640px; width: 100%; max-height: 80vh; overflow: auto; }
 .help-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: .5rem; }
