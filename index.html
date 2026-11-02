@@ -9,17 +9,18 @@
 <body>
   <header class="topbar">
     <a class="brand" href="#/lobby">⚔️ A5 Dota Picker</a>
-    <nav>
-      <a href="#/lobby" data-nav="lobby">Lobby</a>
-      <a href="#/aufstellung" data-nav="aufstellung">Aufstellung</a>
-      <a href="#/draft" data-nav="draft">Draft</a>
+    <nav class="steps" id="steps"></nav>
+    <nav class="extra">
       <a href="#/ideen" data-nav="ideen">Ideen</a>
       <a href="#/spieler" data-nav="spieler">Spieler</a>
       <a href="#/admin" data-nav="admin">Admin</a>
     </nav>
-    <span id="meta-source" class="muted small"></span>
+    <span class="spacer"></span>
+    <button class="btn small" data-top="reset" title="Spielerauswahl, Aufstellung und alle Picks leeren">Neue Runde</button>
+    <button class="btn small help-btn" data-top="help" title="Kurz erklärt">?</button>
   </header>
   <main id="app"></main>
+  <div id="help" class="help-overlay" hidden></div>
   <datalist id="hero-list"></datalist>
 
   <script src="data/config.js"></script>

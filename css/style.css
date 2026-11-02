@@ -36,9 +36,32 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
   backdrop-filter: blur(6px);
 }
 .brand { font-weight: 700; text-decoration: none; letter-spacing: .02em; }
-.topbar nav { display: flex; gap: .25rem; flex-wrap: wrap; }
+.topbar nav { display: flex; gap: .25rem; flex-wrap: wrap; align-items: center; }
 .topbar nav a { text-decoration: none; padding: .3rem .65rem; border-radius: 6px; color: var(--muted); }
 .topbar nav a.active, .topbar nav a:hover { background: var(--panel-2); color: var(--text); }
+
+/* Schrittanzeige Lobby › Aufstellung › Draft */
+.steps { gap: .1rem; }
+.step { display: inline-flex; align-items: center; gap: .4rem; text-decoration: none;
+  padding: .3rem .6rem; border-radius: 6px; color: var(--muted); font-size: .92rem; }
+.step-nr { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
+  border-radius: 50%; background: var(--panel-2); color: var(--muted); font-size: .72rem; font-weight: 700; }
+.step:hover { color: var(--text); }
+.step.active { color: var(--text); background: var(--panel-2); }
+.step.active .step-nr { background: var(--accent-2); color: #1a1206; }
+.step.off { opacity: .4; cursor: default; }
+.step-sep { color: var(--line); }
+.topbar .extra { margin-left: .5rem; padding-left: .5rem; border-left: 1px solid var(--line); }
+.help-btn { width: 30px; justify-content: center; font-weight: 700; }
+
+/* Hilfe-Fenster */
+.help-overlay { position: fixed; inset: 0; z-index: 50; background: #0007; display: flex; align-items: flex-start; justify-content: center; padding: 4rem 16px; }
+.help-box { background: var(--panel); border: 1px solid var(--accent-2); border-radius: var(--radius);
+  padding: 1rem 1.25rem; max-width: 640px; width: 100%; max-height: 80vh; overflow: auto; }
+.help-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: .5rem; }
+.help-box dl { margin: 0; }
+.help-box dt { font-weight: 700; margin-top: .6rem; }
+.help-box dd { margin: .1rem 0 0; color: var(--muted); font-size: .92rem; }
 main { max-width: 1680px; margin: 0 auto; padding: 1.25rem 16px 4rem; }
 
 /* Buttons & Inputs */
@@ -49,7 +72,9 @@ main { max-width: 1680px; margin: 0 auto; padding: 1.25rem 16px 4rem; }
 }
 .btn:hover:not(:disabled) { border-color: var(--muted); }
 .btn:disabled { opacity: .4; cursor: default; }
-.btn.primary { background: var(--accent); border-color: var(--accent); }
+/* Weiter/Bestätigen: freundliches Gold. Rot bleibt dem Löschen vorbehalten. */
+.btn.primary { background: var(--accent-2); border-color: var(--accent-2); color: #1a1206; font-weight: 600; }
+.btn.primary:hover:not(:disabled) { background: #eab85c; border-color: #eab85c; }
 .btn.danger { color: var(--bad); }
 .btn.small { padding: .3rem .6rem; font-size: .85rem; }
 select, input {
@@ -90,6 +115,9 @@ select, input {
 .lineup-badge.good { background: #17301f; color: #8fd8ac; }
 .lineup-badge.warn { background: #332318; color: #e0a84a; }
 .lineup-badge.bad { background: #331a19; color: #f0a09c; }
+.saved-badge { background: #2a2416; color: var(--accent-2); font-size: .72rem; font-weight: 700; padding: 2px 7px; border-radius: 4px; }
+.saved-note { font-weight: 400; font-size: .85rem; color: var(--text); }
+.path-card.saved { border-color: var(--accent-2); box-shadow: inset 3px 0 0 var(--accent-2); }
 .path-card.conflict { border-color: #6a2d2d; opacity: .85; }
 .conflict-bar { background: #2a1716; border: 1px solid #6a2d2d; color: #f0a09c; border-radius: var(--radius); padding: .6rem .9rem; margin-bottom: 1rem; }
 .path-list { list-style: none; padding: 0; margin: 0 0 .9rem; }
@@ -110,8 +138,17 @@ select, input {
 .slot { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: .5rem; display: flex; flex-direction: column; gap: .4rem; min-width: 0; }
 .slot.next { border-color: var(--accent-2); box-shadow: 0 0 0 1px var(--accent-2) inset; }
 .slot.locked { background: #14201a; border-color: #2d5a40; }
-.slot-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .3rem; font-size: .82rem; }
-.slot-head select { flex: 1; min-width: 0; font-size: .8rem; padding: .25rem .3rem; }
+/* Spaltenkopf: zwei feste Zeilen, damit alle fünf Spalten gleich hoch anfangen */
+.slot-head { display: flex; flex-direction: column; gap: .3rem; padding-bottom: .4rem;
+  border-bottom: 1px solid var(--line); height: 62px; overflow: hidden; }
+.slot-head .role-hint { white-space: nowrap; flex: none; }
+.sh-pos { display: flex; align-items: center; gap: .35rem; height: 22px; flex-wrap: nowrap; min-width: 0; }
+.sh-role { font-weight: 700; font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sh-pos .pos, .sh-pos .next-badge { flex: none; }
+.sh-player { display: flex; align-items: center; gap: .35rem; height: 28px; flex-wrap: nowrap; min-width: 0; }
+.sh-player select { flex: 1; min-width: 0; font-size: .8rem; padding: .25rem .3rem; }
+.sh-hint:empty { display: none; }
+.slot .pos { font-size: .75rem; padding: 2px 7px; }
 .next-badge { background: var(--accent-2); color: #1a1206; font-size: .7rem; font-weight: 700; padding: 1px 6px; border-radius: 4px; margin-left: .3rem; }
 .locked-hero { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
 .locked-hero .hero-big { width: 96px; height: 54px; }

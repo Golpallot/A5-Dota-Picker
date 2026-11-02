@@ -129,7 +129,8 @@
   function roleHint(p, pos) {
     if (!p || !Object.keys(p.roles).length) return "";
     const r = p.roles[pos];
-    return r ? `<span class="role-hint r${r}">${r}. Wahl</span>` : `<span class="role-hint none">keine Wunschrolle</span>`;
+    return r ? `<span class="role-hint r${r}" title="${r}. Wunschrolle">${r}. Wahl</span>`
+             : `<span class="role-hint none" title="spielt diese Position normalerweise nicht">Nebenrolle</span>`;
   }
   function roleList(p) {
     const ranked = L.POSITIONS.filter((x) => p.roles[x]).sort((a, b) => p.roles[a] - p.roles[b]);
@@ -163,16 +164,56 @@
   function go(r) { location.hash = "#/" + r; }
   window.addEventListener("hashchange", render);
 
+  // Schrittanzeige: Lobby › Aufstellung › Draft. Vorwärts erst, wenn der Schritt davor erledigt ist.
+  function stepsHtml() {
+    const r = route();
+    const steps = [
+      { id: "lobby", label: "Lobby", ok: true },
+      { id: "aufstellung", label: "Aufstellung", ok: S.selected.length > 0 },
+      { id: "draft", label: "Draft", ok: Object.values(S.assign || {}).some(Boolean) || Object.keys(S.locks || {}).length > 0 }
+    ];
+    return steps.map((s, i) => {
+      const cls = `step${r === s.id ? " active" : ""}${s.ok ? "" : " off"}`;
+      const inner = `<span class="step-nr">${i + 1}</span>${s.label}`;
+      return s.ok
+        ? `<a class="${cls}" href="#/${s.id}" data-nav="${s.id}">${inner}</a>`
+        : `<span class="${cls}" title="Erst den Schritt davor erledigen">${inner}</span>`;
+    }).join('<span class="step-sep">›</span>');
+  }
+
   function render() {
     const r = route();
+    const steps = document.getElementById("steps");
+    if (steps) steps.innerHTML = stepsHtml();
     document.querySelectorAll("[data-nav]").forEach((a) => {
       a.classList.toggle("active", a.dataset.nav === r);
       if (a.dataset.nav === "admin") a.hidden = !hasAdmin();
     });
     const views = { lobby: viewLobby, aufstellung: viewLineups, draft: viewDraft, ideen: viewPlays, spieler: viewPlayers, admin: viewAdmin };
     app.innerHTML = (views[r] || viewLobby)();
-    const src = document.getElementById("meta-source");
-    if (src) src.textContent = OD.state.source === "live" ? "Meta: OpenDota live" : "Meta: Snapshot (offline)";
+  }
+
+  // ---------- Hilfe ----------
+  const HELP = [
+    ["Lobby", "Wer spielt heute mit? 1–5 Leute anklicken, dann auf „Weiter“."],
+    ["Aufstellung", "Die App schlägt vor, wer welche Position spielt – sortiert nach euren Wunschrollen. Eine Karte auswählen, fertig. ★ heißt: von uns gemerkt."],
+    ["Draft", "Pro Position stehen bis zu 6 Helden aus dem eigenen Pool. Ein Klick auf den Helden lockt ihn, danach sortieren sich die anderen Spalten neu. „Als Nächstes“ zeigt, wer dran ist."],
+    ["Gegner & Bans", "Optional oben eintragen – dann kommen Counter-Hinweise dazu."],
+    ["💡 Draft-Ideen", "Fertige Konzepte für zwei bis fünf Leute. „Als Plan nehmen“ hebt die passenden Helden hervor und gibt die Pick-Reihenfolge vor."],
+    ["Team-Check", "Zeigt, was dem Team noch fehlt: Stuns, Initiation, Save, Tank, Nuke und so weiter."],
+    ["Ideen", "Alle Konzepte zum Stöbern, auch ohne laufende Runde."],
+    ["Spieler", "Wer spielt welche Rolle, welche Helden und wie gut – samt Vibecheck-Liste."]
+  ];
+  function toggleHelp(show) {
+    const el = document.getElementById("help");
+    if (!el) return;
+    if (!show) { el.hidden = true; el.innerHTML = ""; return; }
+    el.innerHTML = `<div class="help-box">
+      <div class="help-head"><b>Kurz erklärt</b><button class="x" data-top="help-close" title="Schließen">×</button></div>
+      <dl>${HELP.map(([t, d]) => `<dt>${esc(t)}</dt><dd>${esc(d)}</dd>`).join("")}</dl>
+      <p class="muted small">Was du hier anklickst, bleibt in deinem Browser. Die verbindlichen Daten – Pools, Rollen, Ideen – pflegt der Admin lokal.</p>
+    </div>`;
+    el.hidden = false;
   }
 
   // ---------- Lobby ----------
@@ -183,7 +224,6 @@
       return `<button class="player-card ${on ? "on" : ""}" data-action="toggle-player" data-id="${esc(p.id)}">
         <div class="pc-name">${esc(p.name)}</div>
         <div class="pc-sub">${Object.keys(p.roles).length ? roleList(p) : pos.map(posTag).join(" ") || '<span class="muted small">noch keine Rollen</span>'}</div>
-        ${p.vibecheck.length ? `<div class="pc-vibe">⚠️ ${p.vibecheck.length}× Vibecheck</div>` : ""}
       </button>`;
     }).join("");
     const m = S.selected.length ? L.lineupsFor(S.selected, db.lineups) : { exact: [], partial: [] };
@@ -214,13 +254,13 @@
         <span class="mini-pool">${pool.map((e) => img(e.hero, "hero-mini")).join("")}</span></li>`;
     }).join("");
     const attrs = o.id != null ? `data-id="${esc(o.id)}"` : `data-idx="${o.idx}"`;
-    return `<div class="path-card ${o.highlight ? "best" : ""} ${o.conflict ? "conflict" : ""}">
+    return `<div class="path-card ${o.highlight ? "best" : ""} ${o.conflict ? "conflict" : ""} ${o.saved ? "saved" : ""}">
       ${o.title ? `<div class="path-head">${o.title}</div>` : ""}
       <ul class="path-list">${rows}</ul>
       <div class="row-btns">
         <button class="btn ${o.highlight ? "primary" : ""}" data-action="${o.action}" ${attrs}>Diese Aufstellung →</button>
-        ${o.saveIdx != null ? `<button class="btn small" data-action="save-suggestion" data-idx="${o.saveIdx}" title="Merkt sich die Aufstellung für diese Gruppe">☆ Merken</button>` : ""}
-        ${o.forgetId ? `<button class="btn small danger" data-action="forget-lineup" data-id="${esc(o.forgetId)}" title="Gemerkte Aufstellung löschen">🗑 Vergessen</button>` : ""}
+        ${o.saveIdx != null && hasAdmin() ? `<button class="btn small" data-action="save-suggestion" data-idx="${o.saveIdx}" title="Merkt sich die Aufstellung für diese Gruppe">☆ Merken</button>` : ""}
+        ${o.forgetId && hasAdmin() ? `<button class="btn small danger" data-action="forget-lineup" data-id="${esc(o.forgetId)}" title="Gemerkte Aufstellung löschen">🗑 Vergessen</button>` : ""}
       </div>
     </div>`;
   }
@@ -240,8 +280,13 @@
         : s.allFirst ? '<span class="lineup-badge good">alle auf 1. Wahl</span>'
         : ranked < players.length ? '<span class="lineup-badge warn">nicht für alle Wunschrolle</span>' : "";
       const note = known && known.note ? `<span class="muted small">${esc(known.note)}</span>` : known ? '<span class="muted small">gemerkt</span>' : "";
-      const fits = L.evaluatePlays(allPlays(), playsContext(s.assign, {})).filter((e) => e.status === "offen");
-      const ideas = fits.length ? `<span class="idea-chip" title="${esc(fits.slice(0, 4).map((e) => e.play.name).join(" · "))}">💡 ${fits.length} Idee${fits.length === 1 ? "" : "n"}</span>` : "";
+      const ctx = playsContext(s.assign, {});
+      const fits = L.evaluatePlays(allPlays(), ctx).filter((e) => e.status === "offen");
+      const autoFits = L.evaluatePlays(L.autoPlays(ctx, 6), ctx).filter((e) => e.status === "offen");
+      const n = fits.length + autoFits.length;
+      const titel = fits.slice(0, 4).map((e) => e.play.name).join(" · ")
+        + (autoFits.length ? `${fits.length ? "\n" : ""}+ ${autoFits.length} automatisch gefunden` : "");
+      const ideas = n ? `<span class="idea-chip" title="${esc(titel)}">💡 ${n} Idee${n === 1 ? "" : "n"}</span>` : "";
       return lineupCard(s.assign, { title: `${title} ${badge} ${ideas} ${note}`, highlight: i === 0 && !s.conflicts.length, conflict: s.conflicts.length > 0, action: "choose-suggestion", idx: i, saveIdx: known ? null : i });
     }).join("");
 
@@ -263,8 +308,9 @@
         <div class="path-grid">${saved.map((l) => {
           const cl = L.laneConflicts(l.assign, db.conflicts).filter((c) => S.selected.includes(c.a) && S.selected.includes(c.b));
           return lineupCard(l.assign, {
-            title: (l.note ? esc(l.note) : "Gemerkt") + cl.map((c) => ` <span class="lineup-badge bad">⚠️ ${esc(pname(c.a))} &amp; ${esc(pname(c.b))} auf der ${esc(c.laneName)}</span>`).join(""),
-            conflict: cl.length > 0, action: "choose-lineup", id: l.id, forgetId: l.id
+            title: `<span class="saved-badge">★ Gemerkt</span>${l.note ? ` <span class="saved-note">${esc(l.note)}</span>` : ""}`
+              + cl.map((c) => ` <span class="lineup-badge bad">⚠️ ${esc(pname(c.a))} &amp; ${esc(pname(c.b))} auf der ${esc(c.laneName)}</span>`).join(""),
+            conflict: cl.length > 0, saved: true, action: "choose-lineup", id: l.id, forgetId: l.id
           });
         }).join("")}</div>` : ""}
       <h2 class="section-h">Oder selbst zuordnen</h2>
@@ -337,9 +383,14 @@
     const options = [`<option value="">Random</option>`].concat(
       S.selected.map((id) => player(id)).filter(Boolean).map((pl) => `<option value="${esc(pl.id)}" ${pl.id === pid ? "selected" : ""}>${esc(pl.name)}</option>`)
     ).join("");
+    // Zweizeiliger Kopf mit fester Höhe, damit alle fünf Spalten auf einer Linie beginnen
     const head = `<div class="slot-head">
-      <div>${posLabel(pos)} ${isNext ? '<span class="next-badge">Als Nächstes</span>' : ""} ${roleHint(p, pos)}</div>
-      <select data-action="slot-player" data-pos="${pos}">${options}</select>
+      <div class="sh-pos">${posTag(pos)} <span class="sh-role">${window.POSITION_NAMES[pos]}</span>
+        ${isNext ? '<span class="next-badge">Als Nächstes</span>' : ""}</div>
+      <div class="sh-player">
+        <select data-action="slot-player" data-pos="${pos}">${options}</select>
+        <span class="sh-hint">${roleHint(p, pos)}</span>
+      </div>
     </div>`;
 
     if (locked) {
@@ -440,7 +491,7 @@
     const auto = L.evaluatePlays(L.autoPlays(ctx, 6), ctx).filter((e) => e.status === "offen").slice(0, 2);
     if (!curated.length && !auto.length) return "";
     return `<details class="play-bar" ${S.openPlays ? "open" : ""} data-plays>
-      <summary>💡 Draft-Ideen (${curated.length + auto.length})</summary>
+      <summary title="${esc(curated.length + " hinterlegt" + (auto.length ? " · " + auto.length + " automatisch gefunden" : ""))}">💡 Draft-Ideen (${curated.length + auto.length})</summary>
       <div class="play-grid">${curated.map((e) => playCard(e, false)).join("")}</div>
       ${auto.length ? `<div class="sub-head">Automatisch gefunden</div><div class="play-grid">${auto.map((e) => playCard(e, false)).join("")}</div>` : ""}
     </details>`;
@@ -455,8 +506,9 @@
 
   function proInfo() {
     const p = OD.state.pro;
-    if (!p || S.metaMode === "pub") return "";
-    return `${p.games[1] || 0} T1- + ${p.games[2] || 0} T2-Spiele, letzte ${p.days} Tage${OD.state.proSource === "live" ? "" : " (Snapshot " + p.date + ")"}`;
+    if (!p) return "";
+    const quelle = OD.state.proSource === "live" && OD.state.source === "live" ? "" : ` · Snapshot vom ${p.date}`;
+    return `Meta: Divine+ & Profi-Turniere (${p.games[1] || 0} T1, ${p.games[2] || 0} T2 der letzten ${p.days} Tage)${quelle}`;
   }
 
   function teamSummary() {
@@ -496,8 +548,7 @@
     return `<section>
       <div class="draft-bar">
         <label>Pick-Reihenfolge <select data-action="set-order">${CFG.pickOrders.map((o) => `<option value="${o.id}" ${o.id === S.order ? "selected" : ""}>${esc(o.name)}</option>`).join("")}</select></label>
-        <label>Meta <select data-action="set-meta">${CFG.metaModes.map((m) => `<option value="${m.id}" ${m.id === S.metaMode ? "selected" : ""}>${esc(m.name)}</option>`).join("")}</select></label>
-        <span class="muted small" title="Profi-Daten: OpenDota-Ligen Tier 1 (premium) und Tier 2 (professional)">${proInfo()}</span>
+        <span class="muted small" title="Pub-Winrates aus Divine+ und Profi-Turniere (OpenDota Tier 1 + 2), stündlich aktualisiert">${proInfo()}</span>
         <span class="spacer"></span>
         <button class="btn small" data-action="undo" ${S.history.length ? "" : "disabled"}>↶ Rückgängig</button>
         <button class="btn small" data-action="reset-draft">Draft zurücksetzen</button>
@@ -652,7 +703,6 @@
     "rm-enemy"(el) { pushHistory(); S.enemies = S.enemies.filter((h) => h !== Number(el.dataset.hero)); saveSession(); render(); },
     "rm-ban"(el) { pushHistory(); S.bans = S.bans.filter((h) => h !== Number(el.dataset.hero)); saveSession(); render(); },
     "set-order"(el) { S.order = el.value; saveSession(); render(); },
-    "set-meta"(el) { S.metaMode = el.value; saveSession(); render(); },
     undo() { const last = S.history.pop(); if (last) Object.assign(S, JSON.parse(last)); saveSession(); render(); },
     "reset-draft"() { pushHistory(); S.locks = {}; S.enemies = []; S.bans = []; saveSession(); render(); }
     // Alles zum Pflegen der Daten steckt in nur-lokal/admin.js und wird dort ergänzt.
@@ -664,6 +714,24 @@
     "add-ban"(id) { if (!S.bans.includes(id)) { pushHistory(); S.bans.push(id); } },
     "lock-manual"(id, el) { pushHistory(); S.locks[el.dataset.pos] = id; }
   };
+
+  // Knöpfe in der Kopfzeile (außerhalb von #app)
+  document.addEventListener("click", (e) => {
+    const el = e.target.closest("[data-top]");
+    const overlay = document.getElementById("help");
+    if (!el) {
+      if (overlay && !overlay.hidden && !e.target.closest(".help-box")) toggleHelp(false);
+      return;
+    }
+    if (el.dataset.top === "help") toggleHelp(overlay.hidden);
+    else if (el.dataset.top === "help-close") toggleHelp(false);
+    else if (el.dataset.top === "reset") {
+      if (!confirm("Neue Runde starten? Spielerauswahl, Aufstellung und alle Picks werden geleert.")) return;
+      S = Object.assign(defaultSession(), { metaMode: S.metaMode, order: S.order });
+      saveSession(); go("lobby"); render();
+    }
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") toggleHelp(false); });
 
   app.addEventListener("click", (e) => {
     const el = e.target.closest("[data-action]");
