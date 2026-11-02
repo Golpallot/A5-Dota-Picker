@@ -99,14 +99,24 @@ select, input {
 .hero-big { width: 128px; height: 72px; object-fit: cover; border-radius: 6px; }
 
 /* Lobby */
-.player-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: .75rem; margin-top: 1rem; }
+/* Lobby: wenige große Karten, Rollen untereinander */
+.player-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 300px));
+  justify-content: start; gap: .9rem; margin-top: 1rem; }
 .player-card {
   text-align: left; cursor: pointer; font: inherit; color: inherit;
-  background: var(--panel); border: 2px solid var(--line); border-radius: var(--radius); padding: .9rem;
+  background: var(--panel); border: 2px solid var(--line); border-radius: var(--radius); padding: 1rem 1.1rem;
+  display: flex; flex-direction: column; gap: .6rem;
 }
-.player-card.on { border-color: var(--accent); background: #2a1716; }
-.pc-name { font-weight: 700; font-size: 1.05rem; margin-bottom: .35rem; }
-.pc-vibe { margin-top: .4rem; font-size: .8rem; color: var(--accent-2); }
+.player-card:hover { border-color: var(--muted); }
+.player-card.on { border-color: var(--accent-2); background: #241f14; }
+.pc-name { display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+  font-weight: 700; font-size: 1.15rem; min-height: 26px; padding-bottom: .5rem; border-bottom: 1px solid var(--line); }
+.pc-check { color: var(--accent-2); font-size: 1rem; }
+.pc-sub { display: flex; flex-direction: column; gap: .3rem; }
+.pc-role { display: flex; align-items: center; justify-content: space-between; gap: .5rem; font-size: .9rem; }
+.pc-rank { color: var(--muted); }
+.pc-role .pos { font-size: .78rem; padding: 2px 8px; }
+.pc-empty { color: var(--muted); font-size: .85rem; font-style: italic; }
 
 /* Pfade */
 .path-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: .9rem; margin-top: 1rem; }
