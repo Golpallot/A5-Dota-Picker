@@ -1,0 +1,63 @@
+/* Heldencheck – eigenständige Bewertungsseite */
+.rate-body main { max-width: 760px; }
+.rate-title { font-weight: 700; color: var(--accent-2); }
+
+/* Einstieg */
+.rate-intro h2 { margin-top: 1.5rem; }
+.who-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 240px)); gap: .6rem; margin-top: .75rem; }
+.who-card { background: var(--panel); border: 2px solid var(--line); border-radius: var(--radius);
+  padding: .9rem 1rem; font: inherit; font-weight: 700; font-size: 1.05rem; color: inherit; cursor: pointer; text-align: left; }
+.who-card:hover { border-color: var(--accent-2); background: #241f14; }
+
+/* Fortschritt */
+.rate-progress { height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+.rate-progress .bar { height: 100%; background: var(--accent-2); transition: width .2s; }
+.rate-meta { display: flex; justify-content: space-between; color: var(--muted); font-size: .85rem; margin: .4rem 0 1rem; }
+
+/* Die Karte */
+.rate-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.25rem; text-align: center; }
+.rate-player { font-size: 2rem; font-weight: 700; line-height: 1.1; }
+.rate-pos { display: flex; justify-content: center; align-items: center; gap: .4rem; flex-wrap: wrap;
+  color: var(--muted); margin: .4rem 0 1rem; }
+.rate-wish { background: #2a2416; color: var(--accent-2); font-size: .72rem; font-weight: 700; padding: 2px 7px; border-radius: 4px; }
+.rate-hero-img { width: 256px; max-width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+.rate-hero-name { font-size: 1.4rem; font-weight: 700; margin-top: .5rem; }
+.rate-question { color: var(--muted); font-size: .9rem; margin-top: .6rem; }
+
+/* Bewertungsknöpfe */
+.rate-buttons { display: grid; grid-template-columns: repeat(5, 1fr); gap: .5rem; margin: 1rem 0; }
+.rate-btn { display: flex; flex-direction: column; align-items: center; gap: .15rem; cursor: pointer;
+  background: var(--panel-2); border: 2px solid var(--line); border-radius: 10px; padding: .7rem .3rem;
+  color: inherit; font: inherit; }
+.rate-btn:hover { transform: translateY(-2px); }
+.rate-btn.chosen { box-shadow: 0 0 0 2px var(--accent-2) inset; }
+.rb-icon { font-size: 1.7rem; line-height: 1; }
+.rb-label { font-weight: 700; font-size: .85rem; }
+.rb-hint { color: var(--muted); font-size: .7rem; text-align: center; }
+.rate-btn.c5 { border-color: #3f7a52; } .rate-btn.c5:hover { background: #17301f; }
+.rate-btn.c4 { border-color: #4b7a3f; } .rate-btn.c4:hover { background: #1d2a17; }
+.rate-btn.c3 { border-color: #4a5160; } .rate-btn.c3:hover { background: #232a36; }
+.rate-btn.c2 { border-color: #7a5a2d; } .rate-btn.c2:hover { background: #332816; }
+.rate-btn.c1 { border-color: #8c3330; } .rate-btn.c1:hover { background: #331a19; }
+.rate-btn.c1 .rb-icon { color: #e0564f; }
+.rate-btn.c5 .rb-icon { color: #e8697a; }
+
+.rate-counts { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: .6rem .8rem; margin: .75rem 0; }
+.count-row { display: flex; justify-content: space-between; gap: 1rem; font-size: .85rem; padding: .1rem 0; }
+.count-row.muted { color: var(--muted); font-size: .8rem; }
+.rate-progress.small { height: 4px; margin: .25rem 0 .4rem; }
+.rate-extra { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-bottom: .4rem; }
+.saved-hint { color: #8fd8ac; font-size: .82rem; }
+.rate-extra .btn.small { margin-left: auto; }
+.rate-keys { margin-top: .75rem; }
+
+.rate-done { text-align: center; padding-top: 2rem; }
+.rate-done .row-btns { justify-content: center; margin: 1rem 0; }
+
+@media (max-width: 620px) {
+  .rate-buttons { grid-template-columns: repeat(3, 1fr); }
+  .rb-hint { display: none; }
+  .rate-player { font-size: 1.5rem; }
+}

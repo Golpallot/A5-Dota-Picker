@@ -33,12 +33,31 @@
     return raw.map((w) => (typeof w === "number" ? { hero: w } : w)).filter((w) => w && w.hero);
   }
 
-  // Pool-Eintrag {hero, self, team} → Kennzahlen. team ist optional.
-  function rating(entry) {
+  /**
+   * Fremdbewertungen eines Helden mitteln.
+   * ratings: { spielerId: { pos: { heroId: { raterKey: 1-5 } } } }
+   * only:    Set erlaubter Bewerter-Kennungen (z.B. nur die Anwesenden) – fehlt sie, zählen alle.
+   * Rückgabe: { avg, count } oder null, wenn niemand bewertet hat.
+   */
+  function teamScore(ratings, playerId, pos, hero, only) {
+    const byHero = (((ratings || {})[playerId] || {})[pos] || {})[hero];
+    if (!byHero) return null;
+    const vals = [];
+    for (const key in byHero) {
+      if (only && !only.has(key)) continue;
+      const v = Number(byHero[key]);
+      if (v >= 1 && v <= 5) vals.push(v);
+    }
+    if (!vals.length) return null;
+    return { avg: vals.reduce((a, b) => a + b, 0) / vals.length, count: vals.length };
+  }
+
+  // Pool-Eintrag {hero, self, team} → Kennzahlen. teamOverride schlägt den gespeicherten Wert.
+  function rating(entry, teamOverride) {
     const self = entry.self || 0;
-    const team = entry.team || null;
+    const team = teamOverride != null ? teamOverride : (entry.team || null);
     const avg = team ? (self + team) / 2 : self;
-    return { self, team, avg, delta: team ? team - self : null };
+    return { self, team, avg, delta: team ? Math.round((team - self) * 10) / 10 : null };
   }
 
   // ---------- Aufstellungen ----------
@@ -153,7 +172,8 @@
         const entry = pool.find((e) => e.hero === h);
         const inWish = wish.includes(h);
         const free = !ctx.taken.has(h) || locked === h;
-        return { hero: h, rating: entry ? rating(entry) : null, wish: inWish, free };
+        const team = pid ? teamScore(ctx.ratings, pid, slot.pos, h, ctx.raterIds) : null;
+        return { hero: h, rating: entry ? rating(entry, team && team.avg) : null, wish: inWish, free };
       });
       const usable = options.filter((o) => o.free && (o.rating || o.wish));
       usable.sort((a, b) => (b.rating ? b.rating.avg : 1.5) - (a.rating ? a.rating.avg : 1.5));
@@ -313,15 +333,16 @@
     // Eigene Bewertung (Durchschnitt aus "ich" und "Mitspieler")
     let r = null, isWish = false;
     if (ctx.player) {
+      const team = teamScore(ctx.ratings, ctx.player.id, ctx.pos, ctx.hero, ctx.raterIds);
       const entry = ((ctx.player.pools || {})[ctx.pos] || []).find((e) => e.hero === ctx.hero);
-      if (entry) { r = rating(entry); comfort = r.avg * 6; }
+      if (entry) { r = rating(entry, team && team.avg); comfort = r.avg * 6; }
       else {
         // Wunschheld: eigene Sterne, sonst ein mittlerer Startwert – sonst landet er nie oben
         const w = wishEntries(ctx.player, ctx.pos).find((x) => x.hero === ctx.hero);
         if (w) {
           isWish = true;
-          r = rating({ hero: ctx.hero, self: w.self || ctx.wishBaseline || 2.5 });
-          r.unsure = !w.self;
+          r = rating({ hero: ctx.hero, self: w.self || ctx.wishBaseline || 2.5 }, team && team.avg);
+          r.unsure = !w.self && !team;
           comfort = r.avg * 6 * (ctx.wishFactor == null ? 0.85 : ctx.wishFactor);
         }
       }
@@ -472,5 +493,5 @@
     return [];
   }
 
-  window.Logic = { POSITIONS, heroTags, heroPositions, heroTip, heroName, rating, wishEntries, lineupPlayers, lineupsFor, generateLineups, sameAssign, laneConflicts, LANE_OF, LANE_NAMES, evaluatePlay, evaluatePlays, autoPlays, playHeroesFor, scoreHero, suggest, nextPositions, comboBonus, proStats, metaPart };
+  window.Logic = { POSITIONS, heroTags, heroPositions, heroTip, heroName, rating, teamScore, wishEntries, lineupPlayers, lineupsFor, generateLineups, sameAssign, laneConflicts, LANE_OF, LANE_NAMES, evaluatePlay, evaluatePlays, autoPlays, playHeroesFor, scoreHero, suggest, nextPositions, comboBonus, proStats, metaPart };
 })();
