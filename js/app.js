@@ -101,8 +101,9 @@
   // Werkzeugkasten, den nur-lokal/admin.js bekommt
   function adminApi() {
     return {
-      esc, img, heroName, posLabel, posTag, heroInput, roleHint, diffLabel, stars, ratingHtml,
+      esc, img, heroName, heroLabel, posLabel, posTag, heroInput, roleHint, diffLabel, stars, ratingHtml,
       L, CFG, store, clone, sortPool, normalizeDb, allPlays, player, render, go, S, saveSession, saveDb,
+      teamAll: (playerId, pos, hero) => teamOf(playerId, pos, hero, true),
       getDb: () => db,
       setDb: (next) => { db = next; },
       resetDb: () => { db = clone(repoDb); dbDirty = false; },
@@ -119,15 +120,21 @@
     const keys = S.selected.filter((id) => id !== ownerId).map((id) => map[id]).filter(Boolean);
     return new Set(keys);
   }
-  // Fremdschnitt für einen Pool-/Wunsch-Eintrag
-  function teamOf(playerId, pos, hero) {
-    return L.teamScore(db.ratings, playerId, pos, hero, raterIdsForLobby(playerId));
+  // Für Ideen/Plays: alle Anwesenden auf einmal (niemand bewertet sich selbst)
+  function lobbyRaterIds() {
+    const map = window.RATER_KEYS;
+    if (!map) return null;
+    return new Set(S.selected.map((id) => map[id]).filter(Boolean));
   }
-  // Kennzahlen inkl. Lobby-Schnitt
-  function ratingOf(playerId, pos, entry) {
-    const t = teamOf(playerId, pos, entry.hero);
+  // Fremdschnitt für einen Pool-/Wunsch-Eintrag. alle=true ignoriert die Lobby.
+  function teamOf(playerId, pos, hero, alle) {
+    return L.teamScore(db.ratings, playerId, pos, hero, alle ? null : raterIdsForLobby(playerId));
+  }
+  // Kennzahlen; im Draft zählt die Lobby, auf der Spielerseite zählen alle
+  function ratingOf(playerId, pos, entry, alle) {
+    const t = teamOf(playerId, pos, entry.hero, alle);
     const r = L.rating(entry, t && t.avg);
-    if (t) r.count = t.count;
+    if (t) { r.count = t.count; r.scope = alle ? "alle" : "lobby"; }
     return r;
   }
 
@@ -135,6 +142,8 @@
   const pname = (id) => { const p = player(id); return p ? p.name : "?"; };
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const heroName = (id) => (window.HERO_BY_ID[id] ? window.HERO_BY_ID[id].name : "?");
+  // Kurzname für enge Stellen – siehe HERO_SHORT in data/config.js
+  const heroLabel = (id) => (window.HERO_SHORT && window.HERO_SHORT[id]) || heroName(id);
   const img = (id, cls) => {
     const h = window.HERO_BY_ID[id];
     return h ? `<img class="${cls || "hero-img"}" loading="lazy" alt="${esc(h.name)}" src="https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/${h.short}.png">` : "";
@@ -179,10 +188,12 @@
       <span class="r-lbl">geschätzt</span>${stars(r.self)}</span>`;
     let h = `<span class="rating"><span class="r-lbl">Ich</span>${stars(r.self)}`;
     if (r.team) {
-      const wer = window.RATER_KEYS ? " der Mitspieler in dieser Lobby" : "";
+      const wer = r.scope === "alle" ? " aus der ganzen Gruppe"
+        : window.RATER_KEYS ? " der Mitspieler in dieser Lobby" : "";
       const wie = r.count ? ` title="Schnitt aus ${r.count} Bewertung${r.count === 1 ? "" : "en"}${wer}: ${r.team.toFixed(1).replace(".", ",")}"` : "";
       h += ` <span class="r-lbl"${wie}>Team</span>${stars(r.team)}`;
-      if (r.delta !== 0) h += ` <span class="delta ${r.delta > 0 ? "up" : "down"}" title="Mitspieler minus eigene Bewertung">Δ ${r.delta > 0 ? "+" : "−"}${Math.abs(r.delta)}</span>`;
+      const betrag = Math.abs(r.delta).toFixed(1).replace(/\.0$/, "").replace(".", ",");
+      if (r.delta !== 0) h += ` <span class="delta ${r.delta > 0 ? "up" : "down"}" title="Mitspieler minus eigene Bewertung">Δ ${r.delta > 0 ? "+" : "−"}${betrag}</span>`;
       else h += ` <span class="delta" title="Mitspieler minus eigene Bewertung">Δ 0</span>`;
     }
     return h + "</span>";
@@ -376,7 +387,7 @@
     for (const p of db.players) players[p.id] = p;
     const l = locks || {};
     const taken = new Set([...Object.values(l), ...S.enemies, ...S.bans]);
-    return { assign: assign || {}, players, locks: l, taken, ratings: db.ratings };
+    return { assign: assign || {}, players, locks: l, taken, ratings: db.ratings, raterIds: lobbyRaterIds() };
   }
   // Vorlagen aus data/plays.js (ohne ausgeblendete) + eure eigenen Ideen
   const allPlays = () => (window.DOTA_PLAYS || []).filter((p) => !db.hiddenPlays.includes(p.id))
@@ -447,13 +458,15 @@
       ratings: db.ratings, raterIds: p ? raterIdsForLobby(p.id) : null,
       winrates: OD.state.winrates, matchups: OD.state.matchups, weights: CFG.weights, recWeights: CFG.recWeights,
       wishBaseline: CFG.wishBaseline, wishFactor: CFG.wishFactor, chanceThreshold: CFG.chanceThreshold,
-      limit: CFG.suggestions + 6, tryLimit: CFG.tryoutSuggestions
+      limit: CFG.suggestions + CFG.moreSuggestions + 4, tryLimit: CFG.tryoutSuggestions
     });
     // Helden der aktiven Idee nach oben holen
     const planHeroes = L.playHeroesFor(activePlay(), pos);
     const planned = res.pool.filter((s) => planHeroes.includes(s.hero));
-    const rest = res.pool.filter((s) => !planHeroes.includes(s.hero)).slice(0, Math.max(2, CFG.suggestions - planned.length));
-    res.pool = planned.concat(rest);
+    const andere = res.pool.filter((s) => !planHeroes.includes(s.hero));
+    const oben = planned.concat(andere.slice(0, Math.max(1, CFG.suggestions - planned.length)));
+    const weitere = andere.slice(oben.length - planned.length, oben.length - planned.length + CFG.moreSuggestions);
+    res.pool = oben;
     // Erinnerungsleiste: Wunschhelden dieser Position als Icons, Klick lockt direkt
     const wishBar = res.wishes && res.wishes.length ? `<div class="wish-bar ${res.wishes.some((w) => w.chance) ? "hot" : ""}">
       <span class="wish-lbl" title="Helden, die ${esc(p.name)} mal ausprobieren will">⭐</span>
@@ -476,9 +489,14 @@
         <div class="manual">${heroInput("lock-manual", "Pick des Randoms eintragen…", `data-pos="${pos}"`)}</div>
       </div>`;
     }
+    const mehr = weitere.length ? `<details class="tryout more"${S.openMore && S.openMore[pos] ? " open" : ""} data-more="${pos}">
+        <summary>Weitere Helden (${weitere.length})</summary>
+        <div class="sugg-list">${weitere.map((s) => suggRow(s, pos, null, false)).join("")}</div>
+      </details>` : "";
     return `<div class="slot ${isNext ? "next" : ""}">${head}
       ${wishBar}
       <div class="sugg-list">${res.pool.map((s) => suggRow(s, pos, null, planHeroes.includes(s.hero))).join("")}${empty}</div>
+      ${mehr}
       ${tryout}
       <div class="manual">${heroInput("lock-manual", "Anderen Helden locken…", `data-pos="${pos}"`)}</div>
     </div>`;
@@ -551,15 +569,29 @@
   function teamSummary() {
     const heroes = Object.values(S.locks);
     if (!heroes.length) return "";
-    const counts = {}, who = {};
-    for (const h of heroes) for (const t of L.heroTags(h)) { counts[t] = (counts[t] || 0) + 1; (who[t] = who[t] || []).push(heroName(h)); }
-    const needs = Object.entries(window.TAG_INFO).filter(([, i]) => i.need).map(([t, i]) => {
-      const ok = (counts[t] || 0) >= i.need;
-      const title = who[t] ? who[t].join(", ") : "noch niemand";
-      return `<span class="chip ${ok ? "pos" : "neg"}" title="${esc(title)}">${ok ? "✓" : "✗"} ${esc(i.label)} ${counts[t] || 0}/${i.need}</span>`;
-    }).join("");
-    const mix = `<span class="chip info">Magie ${counts.magic || 0} · Physisch ${counts.physical || 0}</span>`;
-    return `<div class="team-summary"><b>Team-Check:</b> ${needs} ${mix}</div>`;
+    const rows = L.teamCaps(heroes);
+
+    const zeile = (r) => {
+      const stand = r.gap === 0 ? "ok" : r.sum >= r.target * 0.6 ? "halb" : "fehlt";
+      const wer = r.wer.length
+        ? r.wer.slice(0, 4).map((w) => `<span class="cap-hero" title="${esc(heroName(w.hero))}: ${w.v} von 3">${img(w.hero, "hero-mini")}</span>`).join("")
+        : '<span class="muted small">niemand</span>';
+      return `<div class="cap-row ${stand}">
+        <span class="cap-name" title="${esc(r.cap.hint)}">${esc(r.cap.label)}</span>
+        <span class="cap-bar" title="${r.gap ? "da fehlt noch etwas" : "gut abgedeckt"}"><span class="fill" style="width:${Math.round(r.pct * 100)}%"></span></span>
+        <span class="cap-wer">${wer}</span>
+      </div>`;
+    };
+
+    const counts = {};
+    for (const h of heroes) for (const t of L.heroTags(h)) counts[t] = (counts[t] || 0) + 1;
+    return `<details class="team-check" ${S.openCheck === false ? "" : "open"} data-check>
+      <summary><b>Team-Check</b>
+        <span class="muted small">${heroes.length} von 5 gepickt</span>
+        <span class="chip info">Magie ${counts.magic || 0} · Physisch ${counts.physical || 0}</span>
+      </summary>
+      <div class="cap-grid">${rows.map(zeile).join("")}</div>
+    </details>`;
   }
 
   function viewDraft() {
@@ -607,10 +639,10 @@
   function viewPlayers() {
     const cards = db.players.map((p) => {
       const pools = L.POSITIONS.filter((pos) => (p.pools[pos] || []).length || (p.tryout[pos] || []).length).map((pos) => {
-        const entries = (p.pools[pos] || []).slice().sort((a, b) => ratingOf(p.id, pos, b).avg - ratingOf(p.id, pos, a).avg);
+        const entries = (p.pools[pos] || []).slice().sort((a, b) => ratingOf(p.id, pos, b, true).avg - ratingOf(p.id, pos, a, true).avg);
         const tries = L.wishEntries(p, pos);
         return `<div class="pool-row">${posLabel(pos)}
-          ${entries.map((e) => `<div class="pool-line">${img(e.hero, "hero-mini")} <span class="pl-name">${esc(heroName(e.hero))}</span>${ratingHtml(ratingOf(p.id, pos, e))}</div>`).join("")}
+          ${entries.map((e) => `<div class="pool-line">${img(e.hero, "hero-mini")} <span class="pl-name" title="${esc(heroName(e.hero))}">${esc(heroLabel(e.hero))}</span>${ratingHtml(ratingOf(p.id, pos, e, true))}</div>`).join("")}
           ${tries.length ? `<div class="pool-line muted small">Will ausprobieren: ${tries.map((w) => esc(heroName(w.hero)) + (w.self ? ` (${w.self} ★)` : "")).join(", ")}</div>` : ""}
         </div>`;
       }).join("");
@@ -793,6 +825,11 @@
   app.addEventListener("toggle", (e) => {
     const d = e.target;
     if (d.hasAttribute && d.hasAttribute("data-plays")) { S.openPlays = d.open; saveSession(); return; }
+    if (d.hasAttribute && d.hasAttribute("data-check")) { S.openCheck = d.open; saveSession(); return; }
+    if (d.hasAttribute && d.hasAttribute("data-more")) {
+      S.openMore = S.openMore || {};
+      S.openMore[d.dataset.more] = d.open; saveSession(); return;
+    }
     if (!d.classList || !d.classList.contains("tryout")) return;
     S.openTry = S.openTry || {};
     S.openTry[d.dataset.pos] = d.open; saveSession();

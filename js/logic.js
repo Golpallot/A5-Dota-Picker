@@ -148,6 +148,50 @@
     return POSITIONS.every((pos) => (a[pos] || null) === (b[pos] || null));
   }
 
+  // ---------- Team-Fähigkeiten ----------
+  const capsOf = (hero) => (window.HERO_CAPS || {})[hero] || {};
+
+  /**
+   * Was bringt eine Heldenauswahl mit? Rückgabe je Kategorie:
+   * { cap, sum, target, pct, gap, wer: [{hero, v}] } – beste Beiträger zuerst.
+   * Sortiert nach Gewicht, bei gleichem Gewicht zuerst die größte Lücke.
+   */
+  function teamCaps(heroes) {
+    return (window.CAPABILITIES || []).map((cap) => {
+      let sum = 0;
+      const wer = [];
+      for (const h of heroes) {
+        const v = capsOf(h)[cap.id] || 0;
+        if (v > 0) { sum += v; wer.push({ hero: h, v }); }
+      }
+      wer.sort((a, b) => b.v - a.v);
+      return { cap, sum, target: cap.target, pct: Math.min(1, sum / cap.target), gap: Math.max(0, cap.target - sum), wer };
+    }).sort((a, b) => b.cap.weight - a.cap.weight || b.gap - a.gap);
+  }
+
+  // Wie viel schließt dieser Held von den offenen Lücken? (für die Vorschläge)
+  function capNeeds(hero, allies) {
+    const have = {};
+    for (const a of allies) {
+      const c = capsOf(a.hero);
+      for (const id in c) have[id] = (have[id] || 0) + c[id];
+    }
+    const mine = capsOf(hero);
+    let punkte = 0;
+    const gruende = [];
+    for (const cap of (window.CAPABILITIES || [])) {
+      const v = mine[cap.id] || 0;
+      if (!v) continue;
+      const luecke = cap.target - (have[cap.id] || 0);
+      if (luecke <= 0) continue;
+      const beitrag = Math.min(v, luecke) * cap.weight;
+      punkte += beitrag;
+      if (beitrag >= 3) gruende.push({ text: "deckt " + cap.label, kind: "need", gewicht: beitrag });
+    }
+    gruende.sort((a, b) => b.gewicht - a.gewicht);
+    return { punkte: Math.min(punkte, 22), gruende: gruende.slice(0, 3) };
+  }
+
   // ---------- Draft-Ideen ----------
 
   /**
@@ -336,6 +380,7 @@
       const team = teamScore(ctx.ratings, ctx.player.id, ctx.pos, ctx.hero, ctx.raterIds);
       const entry = ((ctx.player.pools || {})[ctx.pos] || []).find((e) => e.hero === ctx.hero);
       if (entry) { r = rating(entry, team && team.avg); comfort = r.avg * 6; }
+      if (r && team) { r.count = team.count; r.scope = ctx.raterIds ? "lobby" : "alle"; }
       else {
         // Wunschheld: eigene Sterne, sonst ein mittlerer Startwert – sonst landet er nie oben
         const w = wishEntries(ctx.player, ctx.pos).find((x) => x.hero === ctx.hero);
@@ -380,17 +425,14 @@
       }
     }
 
-    // Teambedarf: was fehlt dem Team noch?
+    // Teambedarf: welche Lücken im Team schließt dieser Held?
     if (ctx.allies.length > 0) {
+      const bedarf = capNeeds(ctx.hero, ctx.allies);
+      needs += bedarf.punkte;
+      reasons.push(...bedarf.gruende.map((g) => ({ text: g.text, kind: g.kind })));
+
       const counts = {};
       for (const a of ctx.allies) for (const t of heroTags(a.hero)) counts[t] = (counts[t] || 0) + 1;
-      for (const t of tags) {
-        const info = window.TAG_INFO[t];
-        if (info && info.need && (counts[t] || 0) < info.need) {
-          needs += 5;
-          reasons.push({ text: "bringt " + info.label, kind: "need" });
-        }
-      }
       const mag = counts.magic || 0, phy = counts.physical || 0;
       if (ctx.allies.length >= 2) {
         if (mag === 0 && tags.includes("magic")) { needs += 4; reasons.push({ text: "Magieschaden fehlt", kind: "need" }); }
@@ -493,5 +535,5 @@
     return [];
   }
 
-  window.Logic = { POSITIONS, heroTags, heroPositions, heroTip, heroName, rating, teamScore, wishEntries, lineupPlayers, lineupsFor, generateLineups, sameAssign, laneConflicts, LANE_OF, LANE_NAMES, evaluatePlay, evaluatePlays, autoPlays, playHeroesFor, scoreHero, suggest, nextPositions, comboBonus, proStats, metaPart };
+  window.Logic = { POSITIONS, heroTags, heroPositions, heroTip, heroName, rating, teamScore, wishEntries, lineupPlayers, lineupsFor, generateLineups, sameAssign, laneConflicts, LANE_OF, LANE_NAMES, teamCaps, capNeeds, capsOf, evaluatePlay, evaluatePlays, autoPlays, playHeroesFor, scoreHero, suggest, nextPositions, comboBonus, proStats, metaPart };
 })();
