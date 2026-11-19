@@ -12,6 +12,7 @@
   <script src="data/heroes.js"></script>
   <script src="data/pro.js"></script>
   <script src="data/hero-tags.js"></script>
+  <script src="data/capabilities.js"></script>
   <script src="data/combos.js"></script>
   <script src="data/plays.js"></script>
   <script>
@@ -104,6 +105,35 @@
     test("Aufstellungen: Teilgruppe → größere mit Randoms", () => {
       const m = Logic.lineupsFor(["carry", "sup"], lineups);
       eq(m.exact.map((l) => l.id).join(), "b"); eq(m.partial.map((l) => l.id).join(), "a");
+    });
+    const ratings = { sup: { 5: { 30: { r1: 5, r2: 3, r3: 1 } } } };
+
+    test("Heldencheck: Schnitt über alle Bewerter", () => {
+      const t = Logic.teamScore(ratings, "sup", 5, 30, null);
+      eq(t.avg, 3); eq(t.count, 3);
+    });
+    test("Heldencheck: nur die Anwesenden zählen", () => {
+      const t = Logic.teamScore(ratings, "sup", 5, 30, new Set(["r1", "r2"]));
+      eq(t.avg, 4); eq(t.count, 2);
+      eq(Logic.teamScore(ratings, "sup", 5, 30, new Set(["r3"])).avg, 1);
+    });
+    test("Heldencheck: ohne passende Bewertung kein Wert", () => {
+      eq(Logic.teamScore(ratings, "sup", 5, 30, new Set(["r9"])), null);
+      eq(Logic.teamScore(ratings, "sup", 4, 30, null), null);
+      eq(Logic.teamScore({}, "sup", 5, 30, null), null);
+    });
+    test("Heldencheck: Schnitt schlägt den gespeicherten Team-Wert", () => {
+      const r = Logic.rating({ hero: 30, self: 5, team: 2 }, 4);
+      eq(r.team, 4); eq(r.delta, -1); eq(r.avg, 4.5);
+      eq(Logic.rating({ hero: 30, self: 5, team: 2 }).team, 2);
+    });
+    test("Heldencheck: fließt in den Helden-Score ein", () => {
+      const p = pl("sup", { 5: [{ hero: 30, self: 3 }] });
+      const ctx = Object.assign({}, base, { hero: 30, pos: 5, player: p, ratings: { sup: { 5: { 30: { r1: 5, r2: 5 } } } } });
+      const mitLob = Logic.scoreHero(Object.assign({}, ctx, { raterIds: new Set(["r1"]) }));
+      const ohne = Logic.scoreHero(Object.assign({}, base, { hero: 30, pos: 5, player: p }));
+      ok(mitLob.parts.comfort > ohne.parts.comfort, mitLob.parts.comfort + " vs " + ohne.parts.comfort);
+      eq(mitLob.rating.team, 5);
     });
     test("Bewertung: Durchschnitt und Delta", () => {
       const r = Logic.rating({ hero: 1, self: 5, team: 3 });
@@ -216,10 +246,57 @@
       eq(r.reasons.length, 1); // Pro ohne Picks/Bans → kein Chip
       ok(Math.abs(r.points - (6 + -1) / 2) < 0.001, "Punkte " + r.points);
     });
-    test("Team-Check enthält Stun zuerst sowie Tank, Nuke, Counter-Initiation", () => {
-      const needs = Object.keys(window.TAG_INFO).filter((t) => window.TAG_INFO[t].need);
-      eq(needs[0], "stun");
-      ok(["tanky", "nuke", "counter-init"].every((t) => needs.includes(t)));
+    test("Team-Check: Kategorien sauber definiert", () => {
+      const caps = window.CAPABILITIES;
+      eq(caps.length, 12);
+      for (const c of caps) {
+        ok(c.id && c.label && c.hint, "Felder bei " + c.id);
+        ok(c.weight >= 1 && c.weight <= 3, "Gewicht " + c.id);
+        ok(c.target >= 2 && c.target <= 8, "Zielwert " + c.id);
+      }
+      eq(caps[0].id, "scaling");                         // schwerste Kategorie zuerst
+      ok(caps.every((c, i) => i === 0 || caps[i - 1].weight >= c.weight), "nach Gewicht sortiert");
+      ok(caps.some((c) => c.id === "roshan") && caps.some((c) => c.id === "catch"), "Roshan und Catch dabei");
+      ok(!caps.some((c) => c.id === "dispel" || c.id === "waveclear"), "Dispel und Waveclear raus");
+      ok(new Set(caps.map((c) => c.id)).size === caps.length, "keine doppelten Kategorien");
+    });
+    test("Team-Check: Heldenwerte gültig", () => {
+      const ids = new Set(window.CAPABILITIES.map((c) => c.id));
+      let mitWerten = 0;
+      for (const hero in window.HERO_CAPS) {
+        ok(window.HERO_BY_ID[hero], "unbekannter Held " + hero);
+        mitWerten++;
+        for (const k in window.HERO_CAPS[hero]) {
+          ok(ids.has(k), "unbekannte Kategorie " + k + " bei Held " + hero);
+          const v = window.HERO_CAPS[hero][k];
+          ok(v >= 1 && v <= 3, "Wert " + v + " bei Held " + hero);
+        }
+      }
+      ok(mitWerten > 120, "nur " + mitWerten + " Helden mit Werten");
+    });
+    test("Team-Check: summiert und sortiert nach Gewicht", () => {
+      const rows = Logic.teamCaps([29, 30]);           // Tidehunter + Witch Doctor
+      eq(rows[0].cap.weight, 3);                        // schwerste Kategorie zuerst …
+      ok(rows[0].gap >= rows[1].gap || rows[1].cap.weight < 3, "… bei gleichem Gewicht die größere Lücke");
+      const front = rows.find((r) => r.cap.id === "frontline");
+      eq(front.sum, 3); eq(front.wer[0].hero, 29);      // nur Tide liefert Frontline
+      const aoe = rows.find((r) => r.cap.id === "aoe");
+      eq(aoe.sum, 5);                                   // Tide 2 + WD 3
+      ok(rows.every((r, i) => i === 0 || rows[i - 1].cap.weight >= r.cap.weight));
+    });
+    test("Team-Check: Lücke erkannt, volle Deckung nicht", () => {
+      const leer = Logic.teamCaps([]);
+      const lock = leer.find((r) => r.cap.id === "lockdown");
+      eq(lock.sum, 0); eq(lock.gap, lock.cap.target); eq(lock.pct, 0);
+      const voll = Logic.teamCaps([29, 29, 29]).find((r) => r.cap.id === "frontline");
+      eq(voll.gap, 0); eq(voll.pct, 1);
+    });
+    test("Team-Check: Vorschlag bekommt Punkte fürs Lückenfüllen", () => {
+      const mit = Logic.capNeeds(29, [{ hero: 44, pos: 1 }]);    // Tide zu Phantom Assassin
+      ok(mit.punkte > 10, "Punkte " + mit.punkte);
+      ok(mit.gruende.some((g) => /Frontline|Lockdown|Initiation/.test(g.text)));
+      const schon = Logic.capNeeds(29, [{ hero: 29, pos: 3 }, { hero: 29, pos: 4 }, { hero: 29, pos: 5 }]);
+      ok(schon.punkte < mit.punkte, "gedeckte Kategorien zählen weniger");
     });
     test("nextPositions folgt der Pick-Reihenfolge", () => {
       const steps = [[5, 4], [3], [2], [1]];

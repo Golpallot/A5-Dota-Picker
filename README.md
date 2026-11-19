@@ -17,6 +17,7 @@ Draft-Planer für unseren Dota-Stack: Wer spielt in welcher Konstellation welche
 | `data/hero-tags.js` | Positionen, Tags, Tipp pro Held |
 | `data/combos.js` | Explizite Combos mit Bonus |
 | `data/plays.js` | Draft-Ideen (Rezepte für Lanes, Support-Duos, Core-Combos, 5-Mann-Comps) |
+| `data/capabilities.js` | Team-Check: 12 Kategorien mit Gewicht und Zielwert, dazu je Held 0–3 Punkte pro Kategorie |
 | `data/config.js` | Gewichte, Pick-Reihenfolgen, Anzahl Vorschläge |
 | `data/heroes.js` | Heldenliste + Pub-Winrate-Snapshot |
 | `data/pro.js` | Snapshot Profi-Turniere Tier 1/2 (letzte 90 Tage, Picks/Siege/Bans) |

@@ -1,4 +1,4 @@
-# Mini-Webserver für die lokale Vorschau (optional – index.html funktioniert auch per Doppelklick).
+﻿# Mini-Webserver für die lokale Vorschau (optional – index.html funktioniert auch per Doppelklick).
 # Start:  powershell -ExecutionPolicy Bypass -File serve.ps1   → http://localhost:8080
 param([int]$Port = 8080)
 $root = $PSScriptRoot

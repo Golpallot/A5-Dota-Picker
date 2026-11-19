@@ -1,0 +1,8 @@
+# Admin-Bereich bleibt lokal – gehört nicht auf GitHub Pages
+nur-lokal/
+
+# Lokale Einstellungen
+.claude/
+
+# Rohdaten aus dem Heldencheck - enthalten Namen statt Kennungen, bleiben privat
+Ergebnisse Heldencheck/
