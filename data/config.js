@@ -32,10 +32,39 @@ window.DOTA_CONFIG = {
     { id: "free",     name: "Frei (keine Reihenfolge)", steps: [[1, 2, 3, 4, 5]] }
   ],
 
-  // Wie viele Vorschläge aus dem eigenen Pool pro Slot
-  suggestions: 6,
+  // Wie viele Vorschläge aus dem eigenen Pool pro Slot oben stehen (der Rest landet unter "Weitere Helden")
+  suggestions: 3,
+  // Wie viele zusätzlich unter "Weitere Helden" angeboten werden
+  moreSuggestions: 8,
   // Wie viele "Zum Ausprobieren"-Empfehlungen (Wunschhelden können es auf bis zu +2 erweitern)
   tryoutSuggestions: 3
+};
+
+// Kurznamen für enge Stellen (Draftspalten, Listen). Der volle Name steht weiterhin im Tooltip.
+// Einfach ergänzen oder ändern: heroId: "Kurzname".
+window.HERO_SHORT = {
+  90: "KotL",            // Keeper of the Light
+  68: "AA",              // Ancient Apparition
+  76: "OD",              // Outworld Devourer
+  96: "Centaur",         // Centaur Warrunner
+  104: "Legion (LC)",    // Legion Commander
+  53: "Furion (NP)",     // Nature's Prophet
+  46: "TA",              // Templar Assassin
+  83: "Treant",          // Treant Protector
+  44: "PA",              // Phantom Assassin
+  20: "Venge",           // Vengeful Spirit
+  71: "Bara (SB)",       // Spirit Breaker
+  12: "PL",              // Phantom Lancer
+  5: "CM",               // Crystal Maiden
+  101: "Skywrath",       // Skywrath Mage
+  39: "QoP",             // Queen of Pain
+  27: "Rhasta",          // Shadow Shaman
+  60: "Balanar (NS)",    // Night Stalker
+  112: "Wyvern (WW)",    // Winter Wyvern
+  30: "WD",              // Witch Doctor
+  11: "SF",              // Shadow Fiend
+  79: "SD",              // Shadow Demon
+  88: "Nyx"              // Nyx Assassin
 };
 
 // Der Admin-Bereich steckt in nur-lokal/admin.js. Dieser Ordner wird nicht hochgeladen,

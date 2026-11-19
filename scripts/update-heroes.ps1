@@ -1,4 +1,4 @@
-# Aktualisiert data/heroes.js (Heldenliste + Pub-Winrates) und data/pro.js (Profi-Turniere Tier 1/2) aus der OpenDota-API.
+﻿# Aktualisiert data/heroes.js (Heldenliste + Pub-Winrates) und data/pro.js (Profi-Turniere Tier 1/2) aus der OpenDota-API.
 # Ausführen:  powershell -ExecutionPolicy Bypass -File scripts/update-heroes.ps1
 # Danach für neue Helden einen Eintrag in data/hero-tags.js ergänzen (tests.html meldet fehlende).
 $root = Split-Path $PSScriptRoot -Parent
